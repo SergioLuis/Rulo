@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Folder Include="Engine\" />
+    <Folder Include="Engine\Rules\" />
+    <Folder Include="Engine\Facts\" />
+    <Folder Include="Engine\Facts\Attributes\" />
+    <Folder Include="Engine\BuiltIn\" />
+    <Folder Include="Engine\BuiltIn\DateTimeFactSources\" />
+    <Folder Include="Engine\Conditions\" />
+    <Folder Include="Engine\Conditions\Attributes\" />
+  </ItemGroup>
+</Project>
