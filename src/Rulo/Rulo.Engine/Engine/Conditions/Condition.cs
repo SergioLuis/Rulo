@@ -3,22 +3,75 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
+using Rulo.Engine.Facts;
 using Rulo.Engine.Engine.Conditions.Attributes;
 
-namespace Rulo.Engine.Engine.Conditions
+namespace Rulo.Engine.Conditions
 {
-    public abstract class Condition
+    [Flags]
+    public enum SatisfactionStatus : byte
     {
-        public struct InvocationFact
+        Unknown = 0,
+        Satisfied = 1 << 0,
+        Failed = 1 << 1
+    }
+
+    public class EvaluationContext : IDisposable
+    {
+        internal EvaluationContext(Condition condition)
         {
-            public string FactId;
-            public Type FactType;
+            mCondition = condition;
         }
 
-        public virtual InvocationFact[] GetFactsForInvocation()
+        internal EvaluationContext(
+            Condition condition,
+            IEnumerable<EvaluationContext> nestedContext)
         {
-            if (mInvovationFacts != null)
-                return mInvovationFacts;
+            mCondition = condition;
+            mNestedContext= nestedContext.ToList();
+        }
+
+        public async Task<SatisfactionStatus> Evaluate()
+        {
+            if (mCondition == null)
+                throw new NullReferenceException("mCondition");
+
+            return await mCondition.GetSatisfactionStatus();
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!mbIsDisposed)
+            {
+                if (disposing)
+                {
+                    mCondition.FinishEvaluation();
+
+                    if (mNestedContext != null)
+                        mNestedContext.ToList().ForEach(m => m.Dispose(disposing));
+                }
+
+                mbIsDisposed = true;
+            }
+        }
+
+        public void Dispose()
+        {
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
+        }
+
+        readonly Condition mCondition;
+        readonly List<EvaluationContext> mNestedContext;
+        bool mbIsDisposed;
+    }
+
+    public abstract class Condition
+    {
+        public virtual IEnumerable<string> GetRequiredFactIds()
+        {
+            if (mRequiredFactIds != null)
+                return mRequiredFactIds;
 
             Type type = this.GetType();
             ConditionPropertiesAttribute[] attrs = type.GetCustomAttributes( 
@@ -27,34 +80,58 @@ namespace Rulo.Engine.Engine.Conditions
 
             if (attrs == null || attrs.Length == 0)
             {
-                mInvovationFacts = Array.Empty<InvocationFact>();
-                return mInvovationFacts;
+                throw new Exception(
+                    $"Condition {this.GetType()} is not decorated with a ConditionPropertiesAttribute.");
             }
 
-            mInvovationFacts = attrs.Select(attr => new InvocationFact
-            {
-                FactId = attr.FactId,
-                FactType = attr.FactType
-            }).ToArray();
+            HashSet<string> result = new HashSet<string>();
+            foreach (ConditionPropertiesAttribute attr in attrs)
+                result.Add(attr.FactId);
 
-            return mInvovationFacts;
+            mRequiredFactIds = result.ToList().AsReadOnly();
+            return mRequiredFactIds;
         }
 
-        public virtual Task<bool> IsSatisfied(string factId, object o)
+        internal abstract EvaluationContext StartEvaluation(FactContainer container);
+
+        internal abstract void FinishEvaluation();
+
+        public abstract Task<SatisfactionStatus> GetSatisfactionStatus();
+
+        protected IEnumerable<string> mRequiredFactIds;
+    }
+
+    public abstract class Condition<T> : Condition
+    {
+        internal override EvaluationContext StartEvaluation(FactContainer container)
         {
-            InvocationFact[] invocationFacts = GetFactsForInvocation();
-            foreach (InvocationFact f in invocationFacts)
-            {
-                if (f.FactId == factId)
-                    return IsSatisfied(o);
-            }
+            string factId = GetRequiredFactIds().FirstOrDefault();
+            if (string.IsNullOrEmpty(factId))
+                return new EvaluationContext(this);
 
-            return Task.FromResult(false);
+            SetFact(container.PullFact<T>(factId));
+            return new EvaluationContext(this);
         }
 
-        public abstract Task<bool> IsSatisfied(object o);
+        internal override void FinishEvaluation()
+        {
+            CleanFact();
+        }
 
-        protected InvocationFact[] mInvovationFacts;
+        internal void SetFact(Fact<T> fact)
+        {
+            FactToCheck = fact;
+            HasFactToCheck = true;
+        }
+
+        internal void CleanFact()
+        {
+            HasFactToCheck = false;
+            FactToCheck = default(Fact<T>);
+        }
+
+        protected bool HasFactToCheck;
+        protected Fact<T> FactToCheck;
     }
 
     public abstract class ComposedCondition : Condition
@@ -64,31 +141,35 @@ namespace Rulo.Engine.Engine.Conditions
             mChildrenConditions = new List<Condition>(nestedConditions);
         }
 
-        public override InvocationFact[] GetFactsForInvocation()
+        public override IEnumerable<string> GetRequiredFactIds()
         {
-            if (mInvovationFacts != null)
-                return mInvovationFacts;
+            if (mRequiredFactIds != null)
+                return mRequiredFactIds;
 
-            List<InvocationFact> result = new List<InvocationFact>();
-            for (int i = 0; i < mChildrenConditions.Count; i++)
-                result.AddRange(mChildrenConditions[i].GetFactsForInvocation());
+            HashSet<string> result = new HashSet<string>();
+            mChildrenConditions
+                .Select(c => c.GetRequiredFactIds())
+                .SelectMany(l => l)
+                .ToList()
+                .ForEach(l => result.Add(l));
 
-            mInvovationFacts = result.ToArray();
-            return mInvovationFacts;
+            mRequiredFactIds = result.ToList().AsReadOnly();
+            return mRequiredFactIds;
         }
 
-        protected async Task<bool[]> GetNestedConditionsResults(string factId, object o)
+        internal override EvaluationContext StartEvaluation(FactContainer container)
         {
-            return await Task.WhenAll(
-                mChildrenConditions.Select(c => c.IsSatisfied(factId, o)));
+            return new EvaluationContext(
+                this,
+                mChildrenConditions.Select(c => c.StartEvaluation(container)));
         }
 
-        public override Task<bool> IsSatisfied(object o)
+        internal override void FinishEvaluation()
         {
-            throw new InvalidOperationException();
+            // Nothing to do for composed conditions
         }
 
-        readonly List<Condition> mChildrenConditions;
+        protected readonly List<Condition> mChildrenConditions;
     }
 
     public class AndCondition : ComposedCondition
@@ -96,12 +177,17 @@ namespace Rulo.Engine.Engine.Conditions
         public AndCondition(params Condition[] nestedConditions)
             : base(nestedConditions) { }
 
-        public override async Task<bool> IsSatisfied(string factId, object o)
+        public override async Task<SatisfactionStatus> GetSatisfactionStatus()
         {
-            foreach (bool r in await GetNestedConditionsResults(factId, o))
-                if (!r) return false;
+            SatisfactionStatus status = SatisfactionStatus.Unknown;
+            foreach (Condition condition in mChildrenConditions)
+            {
+                status |= await condition.GetSatisfactionStatus();
+                if ((status & SatisfactionStatus.Failed) == SatisfactionStatus.Failed)
+                    return SatisfactionStatus.Failed;
+            }
 
-            return true;
+            return status;
         }
     }
 
@@ -110,12 +196,17 @@ namespace Rulo.Engine.Engine.Conditions
         public OrCondition(params Condition[] nestedConditions)
             : base(nestedConditions) { }
 
-        public override async Task<bool> IsSatisfied(string factId, object o)
+        public override async Task<SatisfactionStatus> GetSatisfactionStatus()
         {
-            foreach (bool r in await GetNestedConditionsResults(factId, o))
-                if (r) return true;
+            SatisfactionStatus status = SatisfactionStatus.Unknown;
+            foreach (Condition condition in mChildrenConditions)
+            {
+                status |= await condition.GetSatisfactionStatus();
+                if ((status & SatisfactionStatus.Satisfied) == SatisfactionStatus.Satisfied)
+                    return SatisfactionStatus.Satisfied;
+            }
 
-            return false;
+            return status;
         }
     }
 }
