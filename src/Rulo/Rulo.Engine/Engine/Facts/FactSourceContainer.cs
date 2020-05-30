@@ -4,10 +4,9 @@ using System.Linq;
 using System.Reflection;
 using System.Threading.Tasks;
 
-using Rulo.Engine.Facts;
 using Rulo.Engine.Facts.Attributes;
 
-namespace Rulo.Engine.Engine.Facts
+namespace Rulo.Engine.Facts
 {
     public class FactSourceContainer
     {

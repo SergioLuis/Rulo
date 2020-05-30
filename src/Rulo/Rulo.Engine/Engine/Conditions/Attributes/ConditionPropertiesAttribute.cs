@@ -1,5 +1,5 @@
 ﻿using System;
-namespace Rulo.Engine.Engine.Conditions.Attributes
+namespace Rulo.Engine.Conditions.Attributes
 {
     [AttributeUsage(AttributeTargets.Class)]
     public class ConditionPropertiesAttribute : Attribute

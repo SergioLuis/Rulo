@@ -1,5 +1,4 @@
-﻿using System;
-namespace Rulo.Engine.Engine.BuiltIn
+﻿namespace Rulo.Engine.BuiltIn
 {
     public static class FactIds
     {

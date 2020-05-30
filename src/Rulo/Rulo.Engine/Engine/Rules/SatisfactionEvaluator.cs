@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Rulo.Engine.Conditions;
-using Rulo.Engine.Engine.Facts;
 using Rulo.Engine.Facts;
 
 namespace Rulo.Engine.Engine.Rules

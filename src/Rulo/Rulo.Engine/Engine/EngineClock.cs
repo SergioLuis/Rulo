@@ -1,5 +1,5 @@
 ﻿using System;
-namespace Rulo.Engine.Engine
+namespace Rulo.Engine
 {
     internal interface IInternalEngineClock
     {

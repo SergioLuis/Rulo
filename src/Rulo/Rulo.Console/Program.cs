@@ -2,14 +2,14 @@
 using System.Net;
 using System.Threading.Tasks;
 
-using Rulo.Engine.Engine;
-using Rulo.Engine.Engine.BuiltIn.DateTimeFactSources;
+using Rulo.Engine;
+using Rulo.Engine.BuiltIn.DateTimeFactSources;
 using Rulo.Engine.Conditions;
-using Rulo.Engine.Engine.Conditions.Attributes;
-using Rulo.Engine.Engine.Facts;
-using Rulo.Engine.Engine.Rules;
+using Rulo.Engine.Conditions.Attributes;
+using Rulo.Engine.Conditions.Composed;
 using Rulo.Engine.Facts;
 using Rulo.Engine.Facts.Attributes;
+using Rulo.Engine.Engine.Rules;
 
 namespace Rulo.Console
 {

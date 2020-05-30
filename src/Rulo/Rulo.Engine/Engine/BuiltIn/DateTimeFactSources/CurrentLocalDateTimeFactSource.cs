@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 using Rulo.Engine.Facts;
 using Rulo.Engine.Facts.Attributes;
 
-namespace Rulo.Engine.Engine.BuiltIn.DateTimeFactSources
+namespace Rulo.Engine.BuiltIn.DateTimeFactSources
 {
     [FactProperties(
         FactId = FactIds.DateTimeFacts.CurrentLocalDateTime,
