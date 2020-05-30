@@ -14,11 +14,10 @@ namespace Rulo.Engine.Engine.BuiltIn.DateTimeFactSources
     )]
     public class CurrentLocalDateTimeFactSource : FactSource<DateTime>
     {
-        public override Task<Result<DateTime>> GetFact()
+        public override Task<Result<DateTime>> GetFactResult()
         {
             return Task.FromResult(
-                new Result<DateTime>(
-                    DateTime.Now.ToLocalTime(), TimeSpan.Zero));
+                new Result<DateTime>(DateTime.Now.ToLocalTime(), TimeSpan.Zero));
         }
     }
 }

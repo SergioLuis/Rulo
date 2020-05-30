@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 using Rulo.Engine.Engine;
 using Rulo.Engine.Engine.BuiltIn.DateTimeFactSources;
-using Rulo.Engine.Engine.Conditions;
+using Rulo.Engine.Conditions;
 using Rulo.Engine.Engine.Conditions.Attributes;
 using Rulo.Engine.Engine.Facts;
 using Rulo.Engine.Engine.Rules;
@@ -17,14 +17,20 @@ namespace Rulo.Console
     {
         static async Task<int> Main(string[] args)
         {
-            var factSourceContainer = new FactSourceContainer(EngineClock.Default);
+            TestEngineClock testEngineClock = new TestEngineClock();
+            testEngineClock.Set(DateTime.Now);
+
+            EngineClock.Default = testEngineClock;
+
+            var factSourceContainer = new FactSourceContainer();
             factSourceContainer
                 .Register<CurrentLocalDateTimeFactSource>()
                 .Register<MachineNameFactSource>()
                 .Register<UserNameFactSource>()
                 .Register<LocalIpAddressFactSource>();
 
-            var satisfactionChain = new SatisfactionChain(factSourceContainer);
+            var satisfactionChain = new SatisfactionEvaluator(factSourceContainer);
+
             Condition c = new AndCondition(
                 new OrCondition(
                     new HasIpAddressCondition(IPAddress.Parse("127.0.0.1")),
@@ -32,7 +38,8 @@ namespace Rulo.Console
                 new HasHostNameCondition("developers-MacBook-Pro"),
                 new HasUserNameCondition("sluisp"));
 
-            bool isConditionSatisfied = await satisfactionChain.IsSatisfied(c);
+            SatisfactionStatus conditionSatisfaction =
+                await satisfactionChain.EvaluateCondition(c);
 
             return 0;
         }
@@ -46,7 +53,7 @@ namespace Rulo.Console
     )]
     class MachineNameFactSource : FactSource<string>
     {
-        public override Task<Result<string>> GetFact()
+        public override Task<Result<string>> GetFactResult()
         {
             return Task.FromResult(
                 new Result<string>(Environment.MachineName, TimeSpan.MaxValue));
@@ -63,7 +70,7 @@ namespace Rulo.Console
     )]
     class UserNameFactSource : FactSource<string>
     {
-        public override Task<Result<string>> GetFact()
+        public override Task<Result<string>> GetFactResult()
         {
             return Task.FromResult(
                 new Result<string>(Environment.UserName, TimeSpan.MaxValue));
@@ -80,7 +87,7 @@ namespace Rulo.Console
     )]
     class LocalIpAddressFactSource : FactSource<IPAddress[]>
     {
-        public override async Task<Result<IPAddress[]>> GetFact()
+        public override async Task<Result<IPAddress[]>> GetFactResult()
         {
             IPAddress[] result = await Task.Run(() =>
             {
@@ -98,29 +105,27 @@ namespace Rulo.Console
     [ConditionProperties(
         FactId = LocalIpAddressFactSource.Id,
         Name = "HasIpAddress",
-        Description = "Whether or not the local machine has a given IP address",
-        FactType = typeof(IPAddress[])
+        Description = "Whether or not the local machine has a given IP address"
     )]
-    class HasIpAddressCondition : Condition
+    class HasIpAddressCondition : Condition<IPAddress[]>
     {
         public HasIpAddressCondition(IPAddress ipAddress)
         {
             mIpAddress = ipAddress;
         }
 
-        public override Task<bool> IsSatisfied(object t)
+        public override Task<SatisfactionStatus> GetSatisfactionStatus()
         {
-            IPAddress[] ipAddress = t as IPAddress[];
-            if (ipAddress == null)
-                return Task.FromResult(false);
+            if (!HasFactToCheck)
+                return Task.FromResult(SatisfactionStatus.Unknown);
 
-            foreach (IPAddress address in ipAddress)
+            foreach (IPAddress ipAddress in FactToCheck.Data)
             {
-                if (address.Equals(mIpAddress))
-                    return Task.FromResult(true);
+                if (ipAddress.Equals(mIpAddress))
+                    return Task.FromResult(SatisfactionStatus.Satisfied);
             }
 
-            return Task.FromResult(false);
+            return Task.FromResult(SatisfactionStatus.Failed);
         }
 
         readonly IPAddress mIpAddress;
@@ -129,48 +134,50 @@ namespace Rulo.Console
     [ConditionProperties(
         FactId = MachineNameFactSource.Id,
         Name = "HasHostName",
-        Description = "Whether or not the local machine has a given name",
-        FactType = typeof(string)
+        Description = "Whether or not the local machine has a given name"
     )]
-    class HasHostNameCondition : Condition
+    class HasHostNameCondition : Condition<string>
     {
         public HasHostNameCondition(string machineName)
         {
-            mHostName = machineName;
+            mMachineName = machineName;
         }
 
-        public override Task<bool> IsSatisfied(object o)
+        public override Task<SatisfactionStatus> GetSatisfactionStatus()
         {
-            string hostName = o as string;
-            if (hostName == null)
-                return Task.FromResult(false);
+            if (!HasFactToCheck)
+                return Task.FromResult(SatisfactionStatus.Unknown);
 
-            return Task.FromResult(mHostName.Equals(hostName));
+            return Task.FromResult(
+                FactToCheck.Data.Equals(mMachineName)
+                    ? SatisfactionStatus.Satisfied
+                    : SatisfactionStatus.Failed);
         }
 
-        readonly string mHostName;
+        readonly string mMachineName;
     }
 
     [ConditionProperties(
         FactId = UserNameFactSource.Id,
         Name = "HasUserName",
-        Description = "Whether or not the current user has a given name",
-        FactType = typeof(string)
+        Description = "Whether or not the current user has a given name"
     )]
-    class HasUserNameCondition : Condition
+    class HasUserNameCondition : Condition<string>
     {
         public HasUserNameCondition(string userName)
         {
             mUserName = userName;
         }
 
-        public override Task<bool> IsSatisfied(object o)
+        public override Task<SatisfactionStatus> GetSatisfactionStatus()
         {
-            string userName = o as string;
-            if (userName == null)
-                return Task.FromResult(false);
+            if (!HasFactToCheck)
+                return Task.FromResult(SatisfactionStatus.Unknown);
 
-            return Task.FromResult(mUserName.Equals(userName));
+            return Task.FromResult(
+                FactToCheck.Data.Equals(mUserName)
+                    ? SatisfactionStatus.Satisfied
+                    : SatisfactionStatus.Failed);
         }
 
         readonly string mUserName;
