@@ -35,9 +35,14 @@ namespace Rulo.Engine.Conditions.Composed
                 mChildrenConditions.Select(c => c.StartEvaluation(container)));
         }
 
-        internal override void FinishEvaluation()
+        internal override void GatherFacts(FactContainer container)
         {
-            // Nothing to do for composed conditions
+            // ComposedConditions don't need to gather facts...
+        }
+
+        internal override void CleanFacts()
+        {
+            // ComposedCondition don't need to clean facts...
         }
 
         protected readonly List<Condition> mChildrenConditions;

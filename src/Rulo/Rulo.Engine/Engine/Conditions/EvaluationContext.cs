@@ -34,10 +34,8 @@ namespace Rulo.Engine.Conditions
             {
                 if (disposing)
                 {
-                    mCondition.FinishEvaluation();
-
-                    if (mNestedContext != null)
-                        mNestedContext.ToList().ForEach(m => m.Dispose(disposing));
+                    mCondition.CleanFacts();
+                    mNestedContext?.ForEach(m => m.Dispose(disposing));
                 }
 
                 mbIsDisposed = true;

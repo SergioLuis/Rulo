@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 
 using Rulo.Engine.Facts;
-using Rulo.Engine.Engine.Conditions.Attributes;
+using Rulo.Engine.Conditions.Attributes;
 
 namespace Rulo.Engine.Conditions
 {
@@ -36,7 +36,9 @@ namespace Rulo.Engine.Conditions
 
         internal abstract EvaluationContext StartEvaluation(FactContainer container);
 
-        internal abstract void FinishEvaluation();
+        internal abstract void GatherFacts(FactContainer container);
+
+        internal abstract void CleanFacts();
 
         public abstract Task<SatisfactionStatus> GetSatisfactionStatus();
 
@@ -47,19 +49,18 @@ namespace Rulo.Engine.Conditions
     {
         internal override EvaluationContext StartEvaluation(FactContainer container)
         {
-            string factId = GetRequiredFactIds().FirstOrDefault();
-            if (string.IsNullOrEmpty(factId))
-                return new EvaluationContext(this);
-
-            SetFact(container.PullFact<T>(factId));
+            GatherFacts(container);
             return new EvaluationContext(this);
         }
 
-        internal override void FinishEvaluation() => CleanFact();
+        internal override void GatherFacts(FactContainer container)
+        {
+            string factId = GetRequiredFactIds().FirstOrDefault();
+            if (!string.IsNullOrEmpty(factId))
+                FactToCheck = container.PullFact<T>(factId);
+        }
 
-        internal void SetFact(Fact<T> fact) => FactToCheck = fact;
-
-        internal void CleanFact() => FactToCheck = default(Fact<T>);
+        internal override void CleanFacts() => FactToCheck = default(Fact<T>);
 
         protected bool HasFactToCheck { get => FactToCheck != null; }
         protected Fact<T> FactToCheck;
