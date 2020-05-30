@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 
 using Rulo.Engine.Facts;
@@ -10,9 +11,8 @@ namespace Rulo.Engine.Engine.Facts
 {
     public class FactSourceContainer
     {
-        public FactSourceContainer(IEngineClock clock)
+        public FactSourceContainer()
         {
-            mEngineClock = clock;
             mFactSources = new Dictionary<string, Type>();
             mActivatedFactSources = new Dictionary<string, FactSource>();
             mFactSourceProperties = new Dictionary<string, FactPropertiesAttribute>();
@@ -48,35 +48,43 @@ namespace Rulo.Engine.Engine.Facts
             return this;
         }
 
-        public async Task<Fact<T>> RequestFact<T>(string factId)
+        public async Task<Fact> RequestNonGenericFact(string factId)
         {
-            FactSource<T> source = GetFactSource<T>(
+            FactSource source = GetNonGenericFactSource(
                 factId,
                 out FactPropertiesAttribute properties);
 
-            DateTime generatedOn = mEngineClock.Now();
-            Result<T> fact = await source.GetFact();
+            DateTime generatedOn = EngineClock.Default.Now();
+            Result result = await source.GetFact();
 
-            var result = new Fact<T>
-            {
-                Data = fact.Data,
-                FactId = properties.FactId,
-                Name = properties.Name,
-                Description = properties.Description,
-                GeneratedOn = generatedOn,
-                ValidUntil = Add(generatedOn, fact.TimeToLive)
-            };
+            Type resultType = result.GetType();
+            Type resultDataType = resultType.GetGenericArguments()[0];
+            Type factType = typeof(Fact<>).MakeGenericType(resultDataType);
 
-            return result;
+            Fact fact = ActivateFact(factType);
+            fact.FactId = properties.FactId;
+            fact.Name = properties.Name;
+            fact.Description = properties.Description;
+            fact.GeneratedOn = generatedOn;
+            fact.ValidUntil = Add(generatedOn, result.TimeToLive);
+
+            PropertyInfo resultDataProperty = resultType.GetProperty("Data");
+            PropertyInfo factDataProperty = factType.GetProperty("Data");
+
+            factDataProperty.SetValue(
+                fact,
+                resultDataProperty.GetValue(result));
+
+            return fact;
         }
 
-        FactSource<T> GetFactSource<T>(
+        FactSource GetNonGenericFactSource(
             string factId, out FactPropertiesAttribute properties)
         {
             if (mActivatedFactSources.TryGetValue(factId, out FactSource factSource))
             {
                 properties = mFactSourceProperties[factId];
-                return factSource as FactSource<T>;
+                return factSource;
             }
 
             if (!mFactSources.TryGetValue(factId, out Type factSourceType))
@@ -85,13 +93,11 @@ namespace Rulo.Engine.Engine.Facts
                     $"There is no registered FactSource that provides '{factId}'");
             }
 
-            FactSource<T> instance = ActivateSource<FactSource<T>>(factSourceType); 
+            FactSource instance = ActivateNonGenericSource(factSourceType);
 
             properties = mFactSourceProperties[factId];
             if (properties.ActivationPolicy == FactSourceActivationPolicy.JustOnce)
-            {
                 mActivatedFactSources.Add(factId, instance);
-            }
 
             return instance;
         }
@@ -106,11 +112,30 @@ namespace Rulo.Engine.Engine.Facts
                 $"Could not activate {t} as {typeof(T)}");
         }
 
+        FactSource ActivateNonGenericSource(Type t)
+        {
+            FactSource result = Activator.CreateInstance(t) as FactSource;
+            if (result != null)
+                return result;
+
+            throw new Exception(
+                $"Could not activate {t} as FactSource.");
+        }
+
+        Fact ActivateFact(Type t)
+        {
+            Fact result = Activator.CreateInstance(t) as Fact;
+            if (result != null)
+                return result;
+
+            throw new Exception($"Could not activate {t} as Fact");
+        }
+
         static DateTime Add(DateTime dateTime, TimeSpan timeSpan)
         {
             try
             {
-                return dateTime +timeSpan;
+                return dateTime + timeSpan;
             }
             catch
             {
@@ -118,7 +143,6 @@ namespace Rulo.Engine.Engine.Facts
             }
         }
 
-        readonly IEngineClock mEngineClock;
         readonly Dictionary<string, Type> mFactSources;
         readonly Dictionary<string, FactSource> mActivatedFactSources;
         readonly Dictionary<string, FactPropertiesAttribute> mFactSourceProperties;
