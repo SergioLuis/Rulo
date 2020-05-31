@@ -9,7 +9,8 @@ using Rulo.Engine.Conditions.Attributes;
 using Rulo.Engine.Conditions.Composed;
 using Rulo.Engine.Facts;
 using Rulo.Engine.Facts.Attributes;
-using Rulo.Engine.Engine.Rules;
+using Rulo.Engine.Rules;
+using Rulo.Engine.Rules.Attributes;
 
 namespace Rulo.Console
 {
@@ -29,17 +30,12 @@ namespace Rulo.Console
                 .Register<UserNameFactSource>()
                 .Register<LocalIpAddressFactSource>();
 
-            var satisfactionChain = new SatisfactionEvaluator(factSourceContainer);
+            SatisfactionEvaluator evaluator =
+                new SatisfactionEvaluator(factSourceContainer);
 
-            Condition c = new AndCondition(
-                new OrCondition(
-                    new HasIpAddressCondition(IPAddress.Parse("127.0.0.1")),
-                    new HasIpAddressCondition(IPAddress.Parse("192.168.0.16"))),
-                new HasHostNameCondition("developers-MacBook-Pro"),
-                new HasUserNameCondition("sluisp"));
+            IRule testRule = new TestRule();
 
-            SatisfactionStatus conditionSatisfaction =
-                await satisfactionChain.EvaluateCondition(c);
+            var result = await evaluator.EvaluateRule(testRule);
 
             return 0;
         }
@@ -181,5 +177,47 @@ namespace Rulo.Console
         }
 
         readonly string mUserName;
+    }
+
+    class TestRule : IRule
+    {
+        public int Priority => 1;
+
+        public Condition Condition => mCondition;
+
+        public TestRule()
+        {
+            mCondition = new AndCondition(
+                new OrCondition(
+                    new HasIpAddressCondition(IPAddress.Parse("127.0.0.1")),
+                    new HasIpAddressCondition(IPAddress.Parse("192.168.0.16"))),
+                new HasHostNameCondition("developers-MacBook-Pro"),
+                new HasUserNameCondition("sluisp"));
+        
+        }
+
+        // public RuleEvaluationResult Fire(
+        //     [FactParam(MachineNameFactSource.Id)]string machineName,
+        //     [FactParam(UserNameFactSource.Id)]string userName)
+        // {
+        //     System.Console.WriteLine($"Machine name: {machineName}");
+        //     System.Console.WriteLine($"User name: {userName}");
+
+        //     return RuleEvaluationResult.EvaluateNext;
+        // }
+
+        public async Task<RuleEvaluationResult> FireAsync(
+            [FactParam(MachineNameFactSource.Id)]string machineName,
+            [FactParam(UserNameFactSource.Id)]string userName)
+        {
+            System.Console.WriteLine($"Machine name: {machineName}");
+            System.Console.WriteLine($"User name: {userName}");
+
+            await Task.Delay(TimeSpan.FromSeconds(10));
+
+            return RuleEvaluationResult.EvaluateNext;
+        }
+
+        readonly Condition mCondition;
     }
 }
