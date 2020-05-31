@@ -57,6 +57,14 @@ namespace Rulo.Engine.Facts
             return result;
         }
 
+        public Fact PullFact(string factId)
+        {
+            if (mFacts.ContainsKey(factId))
+                return mFacts[factId];
+
+            return null;
+        }
+
         readonly Dictionary<string, Fact> mFacts;
     }
 }
